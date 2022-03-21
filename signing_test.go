@@ -27,6 +27,8 @@ import (
 	"testing"
 
 	"github.com/go-jose/go-jose/v3/json"
+
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 )
 
 type staticNonceSource string
@@ -94,7 +96,7 @@ func RoundtripJWS(sigAlg SignatureAlgorithm, serializer func(*JSONWebSignature) 
 
 func TestRoundtripsJWS(t *testing.T) {
 	// Test matrix
-	sigAlgs := []SignatureAlgorithm{RS256, RS384, RS512, PS256, PS384, PS512, HS256, HS384, HS512, ES256, ES384, ES512, EdDSA}
+	sigAlgs := []SignatureAlgorithm{RS256, RS384, RS512, PS256, PS384, PS512, HS256, HS384, HS512, ES256, ES256K, ES384, ES512, EdDSA}
 
 	serializers := []func(*JSONWebSignature) (string, error){
 		func(obj *JSONWebSignature) (string, error) { return obj.CompactSerialize() },
@@ -117,7 +119,7 @@ func TestRoundtripsJWS(t *testing.T) {
 
 func TestRoundtripsJWSCorruptSignature(t *testing.T) {
 	// Test matrix
-	sigAlgs := []SignatureAlgorithm{RS256, RS384, RS512, PS256, PS384, PS512, HS256, HS384, HS512, ES256, ES384, ES512, EdDSA}
+	sigAlgs := []SignatureAlgorithm{RS256, RS384, RS512, PS256, PS384, PS512, HS256, HS384, HS512, ES256, ES256K, ES384, ES512, EdDSA}
 
 	serializers := []func(*JSONWebSignature) (string, error){
 		func(obj *JSONWebSignature) (string, error) { return obj.CompactSerialize() },
@@ -181,7 +183,8 @@ func TestSignerWithBrokenRand(t *testing.T) {
 func TestJWSInvalidKey(t *testing.T) {
 	signingKey0, verificationKey0 := GenerateSigningTestKey(RS256)
 	_, verificationKey1 := GenerateSigningTestKey(ES256)
-	_, verificationKey2 := GenerateSigningTestKey(EdDSA)
+	_, verificationKey2 := GenerateSigningTestKey(ES256K)
+	_, verificationKey3 := GenerateSigningTestKey(EdDSA)
 
 	signer, err := NewSigner(SigningKey{Algorithm: RS256, Key: signingKey0}, nil)
 	if err != nil {
@@ -206,8 +209,13 @@ func TestJWSInvalidKey(t *testing.T) {
 		t.Error("verification should fail with incorrect key")
 	}
 
-	// Must not work with incorrect key
 	_, err = obj.Verify(verificationKey2)
+	if err == nil {
+		t.Error("verification should fail with incorrect key")
+	}
+
+	// Must not work with incorrect key
+	_, err = obj.Verify(verificationKey3)
 	if err == nil {
 		t.Error("verification should fail with incorrect key")
 	}
@@ -296,6 +304,10 @@ func GenerateSigningTestKey(sigAlg SignatureAlgorithm) (sig, ver interface{}) {
 		ver = sig
 	case ES256:
 		key, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		sig = key
+		ver = &key.PublicKey
+	case ES256K:
+		key, _ := ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
 		sig = key
 		ver = &key.PublicKey
 	case ES384:

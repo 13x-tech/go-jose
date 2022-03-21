@@ -36,6 +36,8 @@ import (
 	"strings"
 
 	"github.com/go-jose/go-jose/v3/json"
+
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 )
 
 // rawJSONWebKey represents a public or private key in JWK format, used for parsing/serializing.
@@ -499,6 +501,8 @@ func (key rawJSONWebKey) ecPublicKey() (*ecdsa.PublicKey, error) {
 	switch key.Crv {
 	case "P-256":
 		curve = elliptic.P256()
+	case "secp256k1":
+		curve = secp256k1.S256()
 	case "P-384":
 		curve = elliptic.P384()
 	case "P-521":
@@ -676,6 +680,8 @@ func (key rawJSONWebKey) ecPrivateKey() (*ecdsa.PrivateKey, error) {
 	switch key.Crv {
 	case "P-256":
 		curve = elliptic.P256()
+	case "secp256k1":
+		curve = secp256k1.S256()
 	case "P-384":
 		curve = elliptic.P384()
 	case "P-521":

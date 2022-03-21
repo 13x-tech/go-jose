@@ -29,12 +29,15 @@ import (
 	"reflect"
 	"regexp"
 	"testing"
+
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 )
 
 // We generate only a single RSA and EC key for testing, speeds up tests.
 var rsaTestKey, _ = rsa.GenerateKey(rand.Reader, 2048)
 
 var ecTestKey256, _ = ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+var ecTestKey256k, _ = ecdsa.GenerateKey(secp256k1.S256(), rand.Reader)
 var ecTestKey384, _ = ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
 var ecTestKey521, _ = ecdsa.GenerateKey(elliptic.P521(), rand.Reader)
 
@@ -660,6 +663,10 @@ func generateTestKeys(keyAlg KeyAlgorithm, encAlg ContentEncryption) []testKey {
 				enc: &ecTestKey256.PublicKey,
 			},
 			{
+				dec: ecTestKey256k,
+				enc: &ecTestKey256k.PublicKey,
+			},
+			{
 				dec: ecTestKey384,
 				enc: &ecTestKey384.PublicKey,
 			},
@@ -670,6 +677,10 @@ func generateTestKeys(keyAlg KeyAlgorithm, encAlg ContentEncryption) []testKey {
 			{
 				dec: &JSONWebKey{KeyID: "test", Key: ecTestKey256},
 				enc: &JSONWebKey{KeyID: "test", Key: &ecTestKey256.PublicKey},
+			},
+			{
+				dec: &JSONWebKey{KeyID: "test", Key: ecTestKey256k},
+				enc: &JSONWebKey{KeyID: "test", Key: &ecTestKey256k.PublicKey},
 			},
 		}
 	case A128GCMKW, A128KW:
@@ -721,6 +732,7 @@ var (
 		"AESKWAndGCM128":      mustEncrypter(A128KW, A128GCM, symKey16),
 		"AESKWAndCBC256":      mustEncrypter(A256KW, A256GCM, symKey32),
 		"ECDHOnP256AndGCM128": mustEncrypter(ECDH_ES, A128GCM, &ecTestKey256.PublicKey),
+		"ECDHOn256kAndGCM128": mustEncrypter(ECDH_ES, A128GCM, &ecTestKey256k.PublicKey),
 		"ECDHOnP384AndGCM128": mustEncrypter(ECDH_ES, A128GCM, &ecTestKey384.PublicKey),
 		"ECDHOnP521AndGCM128": mustEncrypter(ECDH_ES, A128GCM, &ecTestKey521.PublicKey),
 	}
@@ -815,6 +827,25 @@ func BenchmarkEncrypt64MBWithECDHOnP256AndGCM128(b *testing.B) {
 	benchEncrypt("64MB", "ECDHOnP256AndGCM128", b)
 }
 
+func BenchmarkEncrypt1BWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("1B", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkEncrypt64BWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("64B", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkEncrypt1KBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("1KB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkEncrypt64KBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("64KB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkEncrypt1MBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("1MB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkEncrypt64MBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchEncrypt("64MB", "ECDHOnS256kAndGCM128", b)
+}
+
 func BenchmarkEncrypt1BWithECDHOnP384AndGCM128(b *testing.B) {
 	benchEncrypt("1B", "ECDHOnP384AndGCM128", b)
 }
@@ -887,9 +918,10 @@ var (
 		"AESKWAndGCM128": symKey16,
 		"AESKWAndCBC256": symKey32,
 
-		"ECDHOnP256AndGCM128": ecTestKey256,
-		"ECDHOnP384AndGCM128": ecTestKey384,
-		"ECDHOnP521AndGCM128": ecTestKey521,
+		"ECDHOnP256AndGCM128":  ecTestKey256,
+		"ECDHOnS256kAndGCM128": ecTestKey256k,
+		"ECDHOnP384AndGCM128":  ecTestKey384,
+		"ECDHOnP521AndGCM128":  ecTestKey521,
 	}
 )
 
@@ -980,6 +1012,25 @@ func BenchmarkDecrypt1MBWithECDHOnP256AndGCM128(b *testing.B) {
 }
 func BenchmarkDecrypt64MBWithECDHOnP256AndGCM128(b *testing.B) {
 	benchDecrypt("64MB", "ECDHOnP256AndGCM128", b)
+}
+
+func BenchmarkDecrypt1BWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("1B", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkDecrypt64BWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("64B", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkDecrypt1KBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("1KB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkDecrypt64KBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("64KB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkDecrypt1MBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("1MB", "ECDHOnS256kAndGCM128", b)
+}
+func BenchmarkDecrypt64MBWithECDHOnS256kAndGCM128(b *testing.B) {
+	benchDecrypt("64MB", "ECDHOnS256kAndGCM128", b)
 }
 
 func BenchmarkDecrypt1BWithECDHOnP384AndGCM128(b *testing.B) {

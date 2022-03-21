@@ -24,6 +24,8 @@ import (
 	"errors"
 	"io"
 	"testing"
+
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 )
 
 func TestEd25519(t *testing.T) {
@@ -137,6 +139,14 @@ func TestInvalidAlgorithmsEC(t *testing.T) {
 	if err != ErrUnsupportedAlgorithm {
 		t.Error("should return error on invalid algorithm")
 	}
+
+	enc = new(ecEncrypterVerifier)
+	enc.publicKey = &ecTestKey256k.PublicKey
+	_, err = enc.encryptKey([]byte{}, "XYZ")
+	if err != ErrUnsupportedAlgorithm {
+		t.Error("should return error on invalid algorithm")
+	}
+
 }
 
 func TestInvalidECKeyGen(t *testing.T) {
@@ -151,6 +161,21 @@ func TestInvalidECKeyGen(t *testing.T) {
 	}
 
 	_, _, err := gen.genKey()
+	if err != nil {
+		t.Error("ec key generator failed to generate key", err)
+	}
+
+	gen = ecKeyGenerator{
+		size:      16,
+		algID:     "A128GCM",
+		publicKey: &ecTestKey256k.PublicKey,
+	}
+
+	if gen.keySize() != 16 {
+		t.Error("ec key generator reported incorrect key size")
+	}
+
+	_, _, err = gen.genKey()
 	if err != nil {
 		t.Error("ec key generator failed to generate key", err)
 	}
@@ -182,6 +207,32 @@ func TestInvalidECDecrypt(t *testing.T) {
 	if _, err := dec.decryptKey(headers, nil, generator); err == nil {
 		t.Error("ec decrypter accepted object with invalid epk header")
 	}
+
+	dec = ecDecrypterSigner{
+		privateKey: ecTestKey256k,
+	}
+
+	generator = randomKeyGenerator{size: 16}
+
+	// Missing epk header
+	headers = rawHeader{}
+
+	if err := headers.set(headerAlgorithm, ECDH_ES); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := dec.decryptKey(headers, nil, generator); err == nil {
+		t.Error("ec decrypter failed to decrypt key", err)
+	}
+
+	if err := headers.set(headerEPK, &JSONWebKey{}); err == nil {
+		t.Fatal("epk header should be invalid")
+	}
+
+	if _, err := dec.decryptKey(headers, nil, generator); err == nil {
+		t.Error("ec decrypter accepted object with invalid epk header")
+	}
+
 }
 
 func TestDecryptWithIncorrectSize(t *testing.T) {
@@ -327,6 +378,7 @@ func BenchmarkPKCSDecryptWithInvalidPayloads(b *testing.B) {
 
 func TestInvalidEllipticCurve(t *testing.T) {
 	signer256 := ecDecrypterSigner{privateKey: ecTestKey256}
+	signer256k := ecDecrypterSigner{privateKey: ecTestKey256k}
 	signer384 := ecDecrypterSigner{privateKey: ecTestKey384}
 	signer521 := ecDecrypterSigner{privateKey: ecTestKey521}
 
@@ -342,6 +394,10 @@ func TestInvalidEllipticCurve(t *testing.T) {
 	if err == nil {
 		t.Error("should not generate ES256 signature with P-384 key")
 	}
+	_, err = signer384.signPayload([]byte{}, ES256K)
+	if err == nil {
+		t.Error("should not generate ES256K signature with P-384 key")
+	}
 	_, err = signer384.signPayload([]byte{}, ES512)
 	if err == nil {
 		t.Error("should not generate ES512 signature with P-384 key")
@@ -350,9 +406,21 @@ func TestInvalidEllipticCurve(t *testing.T) {
 	if err == nil {
 		t.Error("should not generate ES256 signature with P-521 key")
 	}
+	_, err = signer521.signPayload([]byte{}, ES256K)
+	if err == nil {
+		t.Error("should not generate ES256K signature with P-521 key")
+	}
 	_, err = signer521.signPayload([]byte{}, ES384)
 	if err == nil {
 		t.Error("should not generate ES384 signature with P-521 key")
+	}
+	_, err = signer256k.signPayload([]byte{}, ES384)
+	if err == nil {
+		t.Error("should not generate ES384 signature with secp256k1 key")
+	}
+	_, err = signer256k.signPayload([]byte{}, ES512)
+	if err == nil {
+		t.Error("should not generate ES512 signature with secp256k1 key")
 	}
 }
 
@@ -384,10 +452,43 @@ func TestInvalidECPublicKey(t *testing.T) {
 	if _, err := dec.decryptKey(headers, nil, randomKeyGenerator{size: 16}); err == nil {
 		t.Fatal("decrypter accepted JWS with invalid ECDH public key")
 	}
+
+	invalid = &ecdsa.PrivateKey{
+		PublicKey: ecdsa.PublicKey{
+			Curve: secp256k1.S256(),
+			X:     fromBase64Int("MTEx"),
+			Y:     fromBase64Int("MTEx"),
+		},
+		D: fromBase64Int("0_NxaRPUMQoAJt50Gz8YiTr8gRTwyEaCumd-MToTmIo"),
+	}
+
+	headers = rawHeader{}
+
+	if err := headers.set(headerAlgorithm, ECDH_ES); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := headers.set(headerEPK, &JSONWebKey{Key: &invalid.PublicKey}); err != nil {
+		t.Fatal(err)
+	}
+
+	dec = ecDecrypterSigner{
+		privateKey: ecTestKey256k,
+	}
+
+	if _, err := dec.decryptKey(headers, nil, randomKeyGenerator{size: 16}); err == nil {
+		t.Fatal("decrypter accepted JWS with invalid ECDH public key")
+	}
+
 }
 
 func TestInvalidAlgorithmEC(t *testing.T) {
 	err := ecEncrypterVerifier{publicKey: &ecTestKey256.PublicKey}.verifyPayload([]byte{}, []byte{}, "XYZ")
+	if err != ErrUnsupportedAlgorithm {
+		t.Fatal("should not accept invalid/unsupported algorithm")
+	}
+
+	err = ecEncrypterVerifier{publicKey: &ecTestKey256k.PublicKey}.verifyPayload([]byte{}, []byte{}, "XYZ")
 	if err != ErrUnsupportedAlgorithm {
 		t.Fatal("should not accept invalid/unsupported algorithm")
 	}
